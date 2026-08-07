@@ -26,6 +26,6 @@ class Tun:
         if len(name) > IFNAMESIZE:
             raise Exception("name for TUN device too long")
         ifreq = struct.pack("16sH", bytes(name, 'utf-8'), IFF_TUN | IFF_NO_PI)
-        fcntl.ioctl(self.fd, TUNSETIFF, ifreq)
+        ifreq = fcntl.ioctl(self.fd, TUNSETIFF, ifreq)
 
         self.name = struct.unpack("16sH", ifreq)[0].partition(b'\0')[0].decode('utf-8')

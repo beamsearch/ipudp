@@ -43,7 +43,7 @@ while i < len(sys.argv):
         key = int(sys.argv[i], 16)
     elif sys.argv[i] == '-auth':
         i = i + 1
-        auth_msg = bytes(sys.argv[i])
+        auth_msg = sys.argv[i].encode('utf-8')
     elif sys.argv[i] == '-tunnel':
         i = i + 1
         tunnel_type = sys.argv[i]

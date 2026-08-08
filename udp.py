@@ -39,7 +39,7 @@ class UDPTun:
 
             msg = bytearray(data_size + len(self.auth_msg) + 2)
             msg[0:len(self.auth_msg)] = self.auth_msg
-            msg[len(self.auth_msg):len(self.auth_msg)+2] = struct.pack('H', len(data))
+            msg[len(self.auth_msg):len(self.auth_msg)+2] = struct.pack('<H', len(data))
             msg[len(self.auth_msg)+2:len(self.auth_msg)+2+len(data)] = data
 
             self.encrypter.reset()
@@ -56,7 +56,7 @@ class UDPTun:
         msg = self.decrypter.decrypt(msg)
 
         if msg[0:len(self.auth_msg)] == self.auth_msg:
-            data_size = struct.unpack('H', msg[len(self.auth_msg):len(self.auth_msg)+2])[0]
+            data_size = struct.unpack('<H', msg[len(self.auth_msg):len(self.auth_msg)+2])[0]
             self.logger.add_traffic('i', len(msg))
             return msg[len(self.auth_msg)+2:len(self.auth_msg)+2+data_size]
         else:

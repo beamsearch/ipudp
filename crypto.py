@@ -29,9 +29,9 @@ class Encrypter:
                 frag.extend(bytearray(i + 8 - len(data)))
                 frag_len = len(data) - i
 
-            frag_int = struct.unpack('Q', frag)[0]
+            frag_int = struct.unpack('<Q', frag)[0]
             dest_int = (frag_int ^ self.key) % INT64_MAX
-            data[i:i+frag_len] = struct.pack('Q', dest_int)[0:frag_len]
+            data[i:i+frag_len] = struct.pack('<Q', dest_int)[0:frag_len]
             self.key = (frag_int + self.key) ** 3 % INT64_MAX
             i = i + 8
 
@@ -59,8 +59,8 @@ class Decrypter:
                 frag.extend(bytearray(i + 8 - len(data)))
                 frag_len = len(data) - i
 
-            frag_int = struct.unpack('Q', frag)[0]
+            frag_int = struct.unpack('<Q', frag)[0]
             dest_int = (frag_int ^ self.key) % INT64_MAX
-            data[i:i+frag_len] = struct.pack('Q', dest_int)[0:frag_len]
+            data[i:i+frag_len] = struct.pack('<Q', dest_int)[0:frag_len]
             self.key = (dest_int + self.key) ** 3 % INT64_MAX
             i = i + 8

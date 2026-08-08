@@ -72,6 +72,12 @@ Again, the tunneling part is designed to be modular.
 When UDP is not the best option,
 switching to other protocols like TCP or ICMP should be easy.
 
+  Multi-byte fields in the UDP packet format use little-endian byte order: the
+  payload length is an unsigned 16-bit integer, and the cipher operates on
+  unsigned 64-bit blocks. This is wire-compatible with older versions on
+  little-endian systems. Older peers running on big-endian systems must be
+  updated at both ends.
+
 - Instead of using complicated ciphers like AES, TLS, etc.. `ipudp` uses a very simple
 reactive (stream cipher with key stream dependent on all previous plaintext bytes as well)
 cipher. This cipher is undoubtedly uncomparable to well-tested industrial ciphers.

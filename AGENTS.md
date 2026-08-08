@@ -64,3 +64,6 @@ Follow the existing compact style and avoid unrelated refactors. Prefer explicit
 byte encodings and explicit byte-order markers in any new serialized data. Check
 subprocess exit status when adding host-configuration commands. Keep README usage
 and defaults synchronized with the implementation.
+
+Ignore files matched by `.gitignore`, including Vim swap files. Do not inspect,
+modify, delete, stage, or report ignored files unless explicitly requested.

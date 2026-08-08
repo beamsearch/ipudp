@@ -50,15 +50,16 @@ class UDPTun:
             self.logger.add_traffic('o', len(msg))
 
     def recv(self):
-        msg, self.remote_addr = self.socket.recvfrom(self.MTU + len(self.auth_msg) + 2)
+        msg, remote_addr = self.socket.recvfrom(self.MTU + len(self.auth_msg) + 2)
 
         self.decrypter.reset()
         msg = self.decrypter.decrypt(msg)
 
         if msg[0:len(self.auth_msg)] == self.auth_msg:
             data_size = struct.unpack('<H', msg[len(self.auth_msg):len(self.auth_msg)+2])[0]
+            self.remote_addr = remote_addr
             self.logger.add_traffic('i', len(msg))
             return msg[len(self.auth_msg)+2:len(self.auth_msg)+2+data_size]
         else:
-            self.logger.log("authentication failure from " + str(self.remote_addr))
+            self.logger.log("authentication failure from " + str(remote_addr))
             return None

@@ -19,7 +19,7 @@ Both local client and the remote server should run Linux as the operating system
 Only one client can connect to the server at a time.
 
 ## Usage
-On the client side, as root or with `CAP_NET_ADMIN`:
+On the client side, as root or with the required network capabilities:
 ```
 python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
@@ -27,7 +27,7 @@ python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-mtu MTU_TO_USE_DEFAULT_TO_1500] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
-On the server side, as root or with `CAP_NET_ADMIN`:
+On the server side, as root or with the required network capabilities:
 ```
 python main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
     [-auth SAME_AUTH_MESSAGE_AS_CLIENT] \
@@ -37,6 +37,15 @@ python main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
 ```
 You must turn off reverse path filtering on your server system,
 and make sure that the `SERVER_PORT` is open.
+The setup scripts require `iproute2`, `nftables`, and `sysctl`.
+They configure a point-to-point link using `10.0.1.1` on the client and
+`10.0.1.2` on the server, with each peer represented as a `/32` route.
+
+Runtime state is stored under `/run/ipudp` so cleanup can restore the client's
+original default routes and the server's original IPv4 forwarding setting.
+Set `IPUDP_STATE_DIR` to use another state directory. If setup or cleanup fails,
+the program exits with an error instead of continuing with partial network
+configuration.
 
 You should see traffic statistics every 5 seconds, on both sides,
 if `ipudp` is running normally.
@@ -50,7 +59,7 @@ if `ipudp` is running normally.
 |      |                   |       |     |(encrypted  |      |          |                      |  |
 |      | routing           |encrypt|     |UDP traffic)|      |  decrypt |           MASQUERADE |  |
 |      V                   |       |     |            |      |          V                      |  |
-| TUN virtual device --> script    |     |            |      |  TUN virutal device --iptables--|  |
+| TUN virtual device --> script    |     |            |      |  TUN virtual device --nftables--|  |
 |__________________________________|     |____________|      |____________________________________|
 ```
 (and vice versa)
@@ -199,34 +208,38 @@ recv(self): Block and return the next received packet.
 Client initialization script.
 Would be called after the intialization of TUN device and the tunnel class.
 Make the TUN virtual device up,
-assign an IP address to it,
-and configure the routing rules of client system
-to redirect all traffics to the TUN virtual device.
+configure the `10.0.1.1` to `10.0.1.2` point-to-point link,
+pin the server endpoint to its original physical route,
+and replace the client system's default routes with the tunnel route.
 Available environment variables:
 ```
 $TUN_NAME: name of the TUN virtual device
 $REMOTE_IP: IP of server
 $REMOTE_PORT: target port on server
+$IPUDP_STATE_DIR: optional state directory, defaults to /run/ipudp
 ```
 - `client-cleanup.sh`:
 Would be called on exit of `ipudp` at client side.
-Should restore the originally routing rules of the client system.
+Restores the original default routes and any pre-existing exact route to the
+server, removes the point-to-point address, and takes the TUN device down.
 With the same set of available environment variables as `client.sh`
 - `server.sh`:
 Server initialization script.
 Would be called after the intialization of TUN device and the tunnel class.
 Make the TUN virtual device up,
-assign an IP address to it,
+configure the `10.0.1.2` to `10.0.1.1` point-to-point link,
 enable IP forwarding on the server,
-and configure iptables rules for IP Masquerade.
+and create a dedicated `ip ipudp` nftables table for IP masquerading.
 Available environment variables:
 ```
 $TUN_NAME: name of the TUN virtual device
 $LISTEN_PORT: the port which the server listens on
+$IPUDP_STATE_DIR: optional state directory, defaults to /run/ipudp
 ```
 - `server-cleanup.sh`:
 Called on server side exit of `ipudp`.
-Should delete the Masquerade rule.
+Deletes the dedicated nftables table, restores the original IPv4 forwarding
+setting, removes the point-to-point address, and takes the TUN device down.
 With the same set of available environment variables as `server.sh`
 - `main.py`:
 Entry point. Pretty much just combines the above scripts.

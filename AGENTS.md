@@ -10,7 +10,7 @@ and preserve the deliberately simple module boundaries:
 - `udp.py` owns framing, authentication checks, padding, and UDP transport.
 - `crypto.py` owns the packet cipher implementation.
 - `logger.py` owns traffic reporting.
-- `client*.sh` and `server*.sh` modify routing, forwarding, and NAT state.
+- `client*.sh` and `server*.sh` modify routing, forwarding, and nftables state.
 
 The code targets Python 3.5 or newer and uses only the standard library. Avoid
 syntax or APIs introduced after Python 3.5 unless the supported version is
@@ -34,14 +34,15 @@ rather than extending the custom design without a clear compatibility reason.
 Do not run `main.py`, `client.sh`, `client-cleanup.sh`, `server.sh`, or
 `server-cleanup.sh` as routine validation. They require elevated network
 permissions and can replace the default route, enable forwarding, or alter
-iptables rules. Run end-to-end checks only when explicitly requested, using an
+nftables rules. Run end-to-end checks only when explicitly requested, using an
 isolated VM or network namespace with a recovery plan.
 
 ## Validation
 
-There is currently no automated test suite. For ordinary Python changes, run:
+For ordinary Python changes, run:
 
 ```sh
+python3 -m unittest discover -s tests
 python3 -m py_compile main.py udp.py crypto.py tun.py logger.py
 python3 -c "from crypto import Encrypter, Decrypter; p=b'round trip'; e=Encrypter(1).encrypt(p); assert Decrypter(1).decrypt(e) == p"
 ```
@@ -53,8 +54,9 @@ sh -n client.sh client-cleanup.sh server.sh server-cleanup.sh
 ```
 
 Add focused standard-library `unittest` coverage when changing behavior that can
-be exercised without root access. Keep generated files such as `__pycache__`
-out of commits.
+be exercised without root access. Network-script tests must mock privileged
+commands instead of modifying the host. Keep generated files such as
+`__pycache__` out of commits.
 
 ## Style and scope
 

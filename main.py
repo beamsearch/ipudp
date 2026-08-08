@@ -81,34 +81,41 @@ else:
 
 tun = tun.Tun(tun_name)
 os.putenv("TUN_NAME", tun.name)
+script_dir = os.path.dirname(os.path.abspath(__file__))
 if mode == 'c':
     os.putenv("REMOTE_IP", addr[0])
     os.putenv("REMOTE_PORT", str(addr[1]))
-    subprocess.run(["./client.sh"])
+    setup_script = os.path.join(script_dir, "client.sh")
+    cleanup_script = os.path.join(script_dir, "client-cleanup.sh")
 else:
     os.putenv("LISTEN_PORT", str(addr[1]))
-    subprocess.run(["./server.sh"])
+    setup_script = os.path.join(script_dir, "server.sh")
+    cleanup_script = os.path.join(script_dir, "server-cleanup.sh")
 
-def cleanup(signal, frame):
-    if mode == 'c':
-        subprocess.run(["./client-cleanup.sh"])
-    else:
-        subprocess.run(["./server-cleanup.sh"])
-    exit(0)
+def exit_on_signal(signal, frame):
+    raise SystemExit(0)
 
 for sig in [ signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM ]:
-    signal.signal(sig, cleanup)
+    signal.signal(sig, exit_on_signal)
 
-sel = selectors.DefaultSelector()
-sel.register(tun.fd, selectors.EVENT_READ, 0)
-sel.register(tunnel.socket, selectors.EVENT_READ, 1)
+setup_complete = False
+try:
+    subprocess.run([setup_script], check=True)
+    setup_complete = True
 
-while True:
-    for (skey, mask) in sel.select():
-        if skey.data == 0:
-            data = os.read(tun.fd, MTU)
-            tunnel.send(data)
-        elif skey.data == 1:
-            data = tunnel.recv()
-            if data is not None:
-                os.write(tun.fd, data)
+    sel = selectors.DefaultSelector()
+    sel.register(tun.fd, selectors.EVENT_READ, 0)
+    sel.register(tunnel.socket, selectors.EVENT_READ, 1)
+
+    while True:
+        for (skey, mask) in sel.select():
+            if skey.data == 0:
+                data = os.read(tun.fd, MTU)
+                tunnel.send(data)
+            elif skey.data == 1:
+                data = tunnel.recv()
+                if data is not None:
+                    os.write(tun.fd, data)
+finally:
+    if setup_complete:
+        subprocess.run([cleanup_script], check=True)

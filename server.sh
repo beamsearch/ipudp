@@ -9,6 +9,14 @@ NFT_TABLE=ipudp
 STATE_ROOT=${IPUDP_STATE_DIR:-/run/ipudp}
 
 : "${TUN_NAME:?TUN_NAME is required}"
+: "${TUN_MTU:?TUN_MTU is required}"
+
+case "$TUN_MTU" in
+    *[!0-9]*)
+        echo "TUN_MTU must be a decimal integer" >&2
+        exit 1
+        ;;
+esac
 
 for command_name in ip nft sysctl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -46,7 +54,7 @@ trap 'exit 1' HUP INT TERM
 sysctl -n net.ipv4.ip_forward > "$state_dir/ip-forward"
 : > "$state_dir/active"
 
-ip link set dev "$TUN_NAME" up
+ip link set dev "$TUN_NAME" mtu "$TUN_MTU" up
 ip -4 address replace "$SERVER_TUN_IP" peer "$CLIENT_TUN_IP/32" dev "$TUN_NAME"
 sysctl -q -w net.ipv4.ip_forward=1
 

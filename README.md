@@ -23,16 +23,16 @@ On the client side, as root or with the required network capabilities:
 ```
 python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
-    [-padding PACKET_SMALLER_THAN_THIS_WILL_BE_PADDED] \
-    [-mtu MTU_TO_USE_DEFAULT_TO_1500] \
+    [-do-random-padding] \
+    [-mtu TUNNEL_MTU_DEFAULT_TO_1000] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 On the server side, as root or with the required network capabilities:
 ```
 python main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
     [-auth SAME_AUTH_MESSAGE_AS_CLIENT] \
-    [-padding PACKET_SMALLER_THAN_THIS_WILL_BE_PADDED] \
-    [-mtu MTU_TO_USE_DEFAULT_TO_1500] \
+    [-do-random-padding] \
+    [-mtu SAME_TUNNEL_MTU_AS_CLIENT] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 You must turn off reverse path filtering on your server system,
@@ -40,6 +40,13 @@ and make sure that the `SERVER_PORT` is open.
 The setup scripts require `iproute2`, `nftables`, and `sysctl`.
 They configure a point-to-point link using `10.0.1.1` on the client and
 `10.0.1.2` on the server, with each peer represented as a `/32` route.
+The `-mtu` value is applied to both TUN interfaces and must match on both peers.
+The client rejects a value larger than its route to the server can carry after
+the outer IPv4, UDP, length-field, and authentication-message overhead is
+subtracted. A smaller path MTU beyond the directly connected interface may
+still require selecting a more conservative value manually.
+For example, a 1500-byte underlay and the default 19-byte authentication message
+allow a maximum tunnel MTU of 1451 bytes.
 
 Runtime state is stored under `/run/ipudp` so cleanup can restore the client's
 original default routes and the server's original IPv4 forwarding setting.
@@ -100,7 +107,11 @@ That's also the encouraged way to use this tool.
 Just take it as a cryptographic mind-storming ;)
 
 - To avoid traffic pattern analysis (usually based on packet size),
-`ipudp` offers optional random padding to packages.
+`ipudp` offers optional random padding. With `-do-random-padding`, each IP
+packet smaller than the tunnel MTU receives a uniformly selected number of
+padding bytes between zero and the remaining space. The padding bytes come from
+the operating system's random source, and the padded data area never exceeds the
+tunnel MTU. Padding is disabled by default.
 
 - To act against active sniffing, `ipudp` offers simple authentication mechanism.
 Client and server should pre-share a variable length authentication message,
@@ -189,8 +200,7 @@ __init__(
     addr, # (server_ip, server_port) pair for client side, ("", port) for server side
     encrypter, decrypter, # with the interface described above
     auth_msg, MTU,
-    padding_threshold, # the [-padding] option if presents, or None
-    padding_range, # a pair of int, specifying the range of the payload size of padded packets
+    do_random_padding, # whether random padding is enabled
     logger # as described above
 ): initializer
 
@@ -198,7 +208,7 @@ socket:
     The socket used for the tunnel.
     A possible improvement would be to make the whole class selectors-compatible.
 
-send(self, data): Send data over the tunnel. len(data) < self.MTU.
+send(self, data): Send data over the tunnel. len(data) <= self.MTU.
     Should handle insertion of authentication message, encryption, and padding
     
 recv(self): Block and return the next received packet.
@@ -214,6 +224,8 @@ and replace the client system's default routes with the tunnel route.
 Available environment variables:
 ```
 $TUN_NAME: name of the TUN virtual device
+$TUN_MTU: MTU configured on the TUN device
+$AUTH_LENGTH: byte length of the authentication message
 $REMOTE_IP: IP of server
 $REMOTE_PORT: target port on server
 $IPUDP_STATE_DIR: optional state directory, defaults to /run/ipudp
@@ -233,6 +245,7 @@ and create a dedicated `ip ipudp` nftables table for IP masquerading.
 Available environment variables:
 ```
 $TUN_NAME: name of the TUN virtual device
+$TUN_MTU: MTU configured on the TUN device
 $LISTEN_PORT: the port which the server listens on
 $IPUDP_STATE_DIR: optional state directory, defaults to /run/ipudp
 ```

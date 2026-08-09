@@ -21,8 +21,9 @@ auth_msg = b"Infinite Socks Auth"
 
 tunnel_type = None
 MTU = 1000
-padding_threshold = None
-padding_range = None
+do_random_padding = False
+
+MAX_IP_PACKET_SIZE = 65535
 
 i = 1
 while i < len(sys.argv):
@@ -50,10 +51,8 @@ while i < len(sys.argv):
     elif sys.argv[i] == '-mtu':
         i = i + 1
         MTU = int(sys.argv[i], 10)
-    elif sys.argv[i] == '-padding':
-        i = i + 1
-        padding_threshold = int(sys.argv[i], 10)
-        padding_range = (padding_threshold, padding_threshold + 200)
+    elif sys.argv[i] == '-do-random-padding':
+        do_random_padding = True
     else:
         raise Exception("unknown option " + sys.argv[i])
     i = i + 1
@@ -67,13 +66,20 @@ elif key is None:
 elif tunnel_type is None:
     print("no tunnel type specified")
     exit(1)
+elif MTU < 68:
+    print("MTU must be at least 68")
+    exit(1)
+elif MTU + len(auth_msg) + 2 > udp.MAX_UDP_PAYLOAD_SIZE:
+    print("MTU and authentication message exceed the IPv4 UDP payload limit")
+    exit(1)
 elif tunnel_type == 'udp':
+    traffic_logger = logger.Logger(5)
     tunnel = udp.UDPTun(
         mode, addr,
         crypto.Encrypter(key), crypto.Decrypter(key), auth_msg,
         MTU,
-        padding_threshold, padding_range,
-        logger.Logger(5)
+        do_random_padding,
+        traffic_logger
     )
 else:
     print("unknown tunnel type", tunnel_type)
@@ -81,6 +87,8 @@ else:
 
 tun = tun.Tun(tun_name)
 os.putenv("TUN_NAME", tun.name)
+os.putenv("TUN_MTU", str(MTU))
+os.putenv("AUTH_LENGTH", str(len(auth_msg)))
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if mode == 'c':
     os.putenv("REMOTE_IP", addr[0])
@@ -110,12 +118,30 @@ try:
     while True:
         for (skey, mask) in sel.select():
             if skey.data == 0:
-                data = os.read(tun.fd, MTU)
-                tunnel.send(data)
+                data = os.read(tun.fd, MAX_IP_PACKET_SIZE)
+                if len(data) == 0:
+                    raise RuntimeError("TUN device closed")
+                elif len(data) > MTU:
+                    traffic_logger.log(
+                        "dropping TUN packet of {} bytes; configured MTU is {}".format(
+                            len(data), MTU
+                        )
+                    )
+                else:
+                    tunnel.send(data)
             elif skey.data == 1:
                 data = tunnel.recv()
                 if data is not None:
-                    os.write(tun.fd, data)
+                    if len(data) > MTU:
+                        traffic_logger.log(
+                            "dropping UDP packet containing {} bytes; configured MTU is {}".format(
+                                len(data), MTU
+                            )
+                        )
+                    else:
+                        written = os.write(tun.fd, data)
+                        if written != len(data):
+                            raise RuntimeError("incomplete TUN packet write")
 finally:
     if setup_complete:
         subprocess.run([cleanup_script], check=True)

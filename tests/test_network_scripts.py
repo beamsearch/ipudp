@@ -33,7 +33,11 @@ if command == "ip":
     elif arguments[:6] == ["-4", "route", "show", "table", "main", "exact"]:
         pass
     elif arguments[:3] == ["-4", "route", "get"]:
-        print(arguments[3] + " via 192.0.2.1 dev eth0 src 192.0.2.10")
+        route_mtu = os.environ.get("IPUDP_TEST_ROUTE_MTU")
+        mtu_output = " mtu " + route_mtu if route_mtu else ""
+        print(arguments[3] + " via 192.0.2.1 dev eth0 src 192.0.2.10" + mtu_output)
+    elif arguments == ["-o", "link", "show", "dev", "eth0"]:
+        print("2: eth0: <UP> mtu 1500 qdisc fq_codel state UP")
 elif command == "nft":
     if arguments[:3] == ["list", "table", "ip"]:
         sys.exit(1)
@@ -67,6 +71,8 @@ class NetworkScriptTests(unittest.TestCase):
             "IPUDP_TEST_LOG": self.log_path,
             "PATH": self.bin_dir + os.pathsep + self.environment["PATH"],
             "TUN_NAME": "tun0",
+            "TUN_MTU": "1451",
+            "AUTH_LENGTH": "19",
         })
 
     def tearDown(self):
@@ -95,6 +101,10 @@ class NetworkScriptTests(unittest.TestCase):
         self.assertTrue(os.path.isdir(os.path.join(self.state_dir, "client-tun0")))
 
         setup_log = self.command_log()
+        self.assertIn(
+            "ip link set dev tun0 mtu 1451 up",
+            setup_log,
+        )
         self.assertIn(
             "ip -4 address replace 10.0.1.1 peer 10.0.1.2/32 dev tun0",
             setup_log,
@@ -139,11 +149,42 @@ class NetworkScriptTests(unittest.TestCase):
         )
         self.assertIn("ip -4 address flush dev tun0", command_log)
 
+    def test_client_rejects_mtu_larger_than_underlay_allows(self):
+        environment = {
+            "REMOTE_IP": "203.0.113.10",
+            "TUN_MTU": "1452",
+        }
+
+        self.assertNotEqual(self.call_script("client.sh", environment), 0)
+        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "client-tun0")))
+        self.assertNotIn(
+            "ip link set dev tun0 mtu 1452 up",
+            self.command_log(),
+        )
+
+    def test_client_prefers_route_specific_mtu(self):
+        environment = {
+            "REMOTE_IP": "203.0.113.10",
+            "TUN_MTU": "1352",
+            "IPUDP_TEST_ROUTE_MTU": "lock 1400",
+        }
+
+        self.assertNotEqual(self.call_script("client.sh", environment), 0)
+        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "client-tun0")))
+        self.assertNotIn(
+            "ip -o link show dev eth0",
+            self.command_log(),
+        )
+
     def test_server_setup_and_cleanup(self):
         self.run_script("server.sh")
         self.assertTrue(os.path.isdir(os.path.join(self.state_dir, "server-tun0")))
 
         setup_log = self.command_log()
+        self.assertIn(
+            "ip link set dev tun0 mtu 1451 up",
+            setup_log,
+        )
         self.assertIn(
             "ip -4 address replace 10.0.1.2 peer 10.0.1.1/32 dev tun0",
             setup_log,

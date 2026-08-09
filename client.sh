@@ -8,7 +8,22 @@ SERVER_TUN_IP=10.0.1.2
 STATE_ROOT=${IPUDP_STATE_DIR:-/run/ipudp}
 
 : "${TUN_NAME:?TUN_NAME is required}"
+: "${TUN_MTU:?TUN_MTU is required}"
+: "${AUTH_LENGTH:?AUTH_LENGTH is required}"
 : "${REMOTE_IP:?REMOTE_IP is required}"
+
+case "$TUN_MTU" in
+    *[!0-9]*)
+        echo "TUN_MTU must be a decimal integer" >&2
+        exit 1
+        ;;
+esac
+case "$AUTH_LENGTH" in
+    *[!0-9]*)
+        echo "AUTH_LENGTH must be a decimal integer" >&2
+        exit 1
+        ;;
+esac
 
 if ! command -v ip >/dev/null 2>&1; then
     echo "iproute2 is required" >&2
@@ -48,6 +63,7 @@ route_info=$(ip -4 route get "$REMOTE_IP")
 remote_gateway=
 remote_device=
 remote_source=
+underlay_mtu=
 set -- $route_info
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -66,6 +82,16 @@ while [ "$#" -gt 0 ]; do
             remote_source=$2
             shift 2
             ;;
+        mtu)
+            [ "$#" -ge 2 ] || break
+            if [ "$2" = lock ] && [ "$#" -ge 3 ]; then
+                underlay_mtu=$3
+                shift 3
+            else
+                underlay_mtu=$2
+                shift 2
+            fi
+            ;;
         *)
             shift
             ;;
@@ -77,9 +103,36 @@ if [ -z "$remote_device" ]; then
     exit 1
 fi
 
+if [ -z "$underlay_mtu" ]; then
+    link_info=$(ip -o link show dev "$remote_device")
+    set -- $link_info
+    while [ "$#" -gt 0 ]; do
+        if [ "$1" = mtu ] && [ "$#" -ge 2 ]; then
+            underlay_mtu=$2
+            break
+        fi
+        shift
+    done
+fi
+
+case "$underlay_mtu" in
+    ''|*[!0-9]*)
+        echo "failed to determine the MTU of $remote_device" >&2
+        exit 1
+        ;;
+esac
+
+tunnel_overhead=$((20 + 8 + 2 + AUTH_LENGTH))
+max_tun_mtu=$((underlay_mtu - tunnel_overhead))
+if [ "$TUN_MTU" -gt "$max_tun_mtu" ]; then
+    echo "tunnel MTU $TUN_MTU exceeds the maximum $max_tun_mtu for $remote_device" >&2
+    echo "underlay MTU is $underlay_mtu and tunnel overhead is $tunnel_overhead bytes" >&2
+    exit 1
+fi
+
 : > "$state_dir/active"
 
-ip link set dev "$TUN_NAME" up
+ip link set dev "$TUN_NAME" mtu "$TUN_MTU" up
 ip -4 address replace "$CLIENT_TUN_IP" peer "$SERVER_TUN_IP/32" dev "$TUN_NAME"
 
 set -- "$REMOTE_IP/32" table main

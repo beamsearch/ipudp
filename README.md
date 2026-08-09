@@ -225,7 +225,7 @@ Available environment variables:
 ```
 $TUN_NAME: name of the TUN virtual device
 $TUN_MTU: MTU configured on the TUN device
-$AUTH_LENGTH: byte length of the authentication message
+$MINIMUM_REQUIRED_UNDERLAY_MTU: minimum route MTU including tunnel overhead
 $REMOTE_IP: IP of server
 $REMOTE_PORT: target port on server
 $IPUDP_STATE_DIR: optional state directory, defaults to /run/ipudp

@@ -72,7 +72,7 @@ class NetworkScriptTests(unittest.TestCase):
             "PATH": self.bin_dir + os.pathsep + self.environment["PATH"],
             "TUN_NAME": "tun0",
             "TUN_MTU": "1451",
-            "AUTH_LENGTH": "19",
+            "MINIMUM_REQUIRED_UNDERLAY_MTU": "1500",
         })
 
     def tearDown(self):
@@ -153,6 +153,7 @@ class NetworkScriptTests(unittest.TestCase):
         environment = {
             "REMOTE_IP": "203.0.113.10",
             "TUN_MTU": "1452",
+            "MINIMUM_REQUIRED_UNDERLAY_MTU": "1501",
         }
 
         self.assertNotEqual(self.call_script("client.sh", environment), 0)
@@ -166,6 +167,7 @@ class NetworkScriptTests(unittest.TestCase):
         environment = {
             "REMOTE_IP": "203.0.113.10",
             "TUN_MTU": "1352",
+            "MINIMUM_REQUIRED_UNDERLAY_MTU": "1401",
             "IPUDP_TEST_ROUTE_MTU": "lock 1400",
         }
 

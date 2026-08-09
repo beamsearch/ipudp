@@ -24,6 +24,9 @@ MTU = 1000
 do_random_padding = False
 
 MAX_IP_PACKET_SIZE = 65535
+OUTER_IPV4_HEADER_SIZE = 20
+UDP_HEADER_SIZE = 8
+PAYLOAD_LENGTH_FIELD_SIZE = 2
 
 i = 1
 while i < len(sys.argv):
@@ -69,7 +72,7 @@ elif tunnel_type is None:
 elif MTU < 68:
     print("MTU must be at least 68")
     exit(1)
-elif MTU + len(auth_msg) + 2 > udp.MAX_UDP_PAYLOAD_SIZE:
+elif MTU + len(auth_msg) + PAYLOAD_LENGTH_FIELD_SIZE > udp.MAX_UDP_PAYLOAD_SIZE:
     print("MTU and authentication message exceed the IPv4 UDP payload limit")
     exit(1)
 elif tunnel_type == 'udp':
@@ -88,7 +91,14 @@ else:
 tun = tun.Tun(tun_name)
 os.putenv("TUN_NAME", tun.name)
 os.putenv("TUN_MTU", str(MTU))
-os.putenv("AUTH_LENGTH", str(len(auth_msg)))
+minimum_required_underlay_mtu = (
+    MTU + OUTER_IPV4_HEADER_SIZE + UDP_HEADER_SIZE
+    + PAYLOAD_LENGTH_FIELD_SIZE + len(auth_msg)
+)
+os.putenv(
+    "MINIMUM_REQUIRED_UNDERLAY_MTU",
+    str(minimum_required_underlay_mtu)
+)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if mode == 'c':
     os.putenv("REMOTE_IP", addr[0])

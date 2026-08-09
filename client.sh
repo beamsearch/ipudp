@@ -9,7 +9,7 @@ STATE_ROOT=${IPUDP_STATE_DIR:-/run/ipudp}
 
 : "${TUN_NAME:?TUN_NAME is required}"
 : "${TUN_MTU:?TUN_MTU is required}"
-: "${AUTH_LENGTH:?AUTH_LENGTH is required}"
+: "${MINIMUM_REQUIRED_UNDERLAY_MTU:?MINIMUM_REQUIRED_UNDERLAY_MTU is required}"
 : "${REMOTE_IP:?REMOTE_IP is required}"
 
 case "$TUN_MTU" in
@@ -18,9 +18,9 @@ case "$TUN_MTU" in
         exit 1
         ;;
 esac
-case "$AUTH_LENGTH" in
+case "$MINIMUM_REQUIRED_UNDERLAY_MTU" in
     *[!0-9]*)
-        echo "AUTH_LENGTH must be a decimal integer" >&2
+        echo "MINIMUM_REQUIRED_UNDERLAY_MTU must be a decimal integer" >&2
         exit 1
         ;;
 esac
@@ -122,11 +122,9 @@ case "$underlay_mtu" in
         ;;
 esac
 
-tunnel_overhead=$((20 + 8 + 2 + AUTH_LENGTH))
-max_tun_mtu=$((underlay_mtu - tunnel_overhead))
-if [ "$TUN_MTU" -gt "$max_tun_mtu" ]; then
-    echo "tunnel MTU $TUN_MTU exceeds the maximum $max_tun_mtu for $remote_device" >&2
-    echo "underlay MTU is $underlay_mtu and tunnel overhead is $tunnel_overhead bytes" >&2
+if [ "$underlay_mtu" -lt "$MINIMUM_REQUIRED_UNDERLAY_MTU" ]; then
+    echo "underlay MTU $underlay_mtu on $remote_device is smaller than required" >&2
+    echo "minimum required underlay MTU is $MINIMUM_REQUIRED_UNDERLAY_MTU for tunnel MTU $TUN_MTU" >&2
     exit 1
 fi
 

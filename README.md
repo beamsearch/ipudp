@@ -1,16 +1,5 @@
 # tunneling IP over UDP, with encryption and random padding
 
-## MAINTANENCE WARNING
-Although the author is very glad to discuss on this project,
-fix its problems and make improvements to it,
-NO MAINTANENCE OR TECHNICAL SUPPORT IS GUARANTEED.
-You are welcomed to open issues/submit PRs,
-BUT THERE ARE NO GUARANTEES ON (SWIFT) HANDLING.
-If your issue/PR is not handled in time somehow,
-you are encouraged to read the source, understand the idea,
-and implement your own version.
-That's also the spirit behind the design of `ipudp`.
-
 ## Introduction
 This tool can be used to hide your traffic and/or pass certain firewalls.
 You need a remote machine that is secure and has full internet access.

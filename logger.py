@@ -1,6 +1,33 @@
 
+import datetime
+import socket
 import sys
 import time
+
+def packet_event(role, event, packet):
+    source, destination = _packet_addresses(packet)
+    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return "{} role={} event={} source={} destination={}".format(
+        timestamp, role, event, source, destination
+    )
+
+def _packet_addresses(packet):
+    if len(packet) == 0:
+        return "unknown", "unknown"
+
+    version = packet[0] >> 4
+    if version == 4 and len(packet) >= 20 and (packet[0] & 0x0f) >= 5:
+        return (
+            socket.inet_ntop(socket.AF_INET, bytes(packet[12:16])),
+            socket.inet_ntop(socket.AF_INET, bytes(packet[16:20]))
+        )
+    elif version == 6 and len(packet) >= 40:
+        return (
+            socket.inet_ntop(socket.AF_INET6, bytes(packet[8:24])),
+            socket.inet_ntop(socket.AF_INET6, bytes(packet[24:40]))
+        )
+
+    return "unknown", "unknown"
 
 class Logger:
     def __init__(self, freq, target=sys.stdout):

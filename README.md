@@ -14,6 +14,7 @@ python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
     [-do-random-padding] \
     [-mtu TUNNEL_MTU_DEFAULT_TO_1000] \
+    [-debug] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 On the server side, as root or with the required network capabilities:
@@ -22,6 +23,7 @@ python main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
     [-auth SAME_AUTH_MESSAGE_AS_CLIENT] \
     [-do-random-padding] \
     [-mtu SAME_TUNNEL_MTU_AS_CLIENT] \
+    [-debug] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 You must turn off reverse path filtering on your server system,
@@ -45,6 +47,9 @@ configuration.
 
 You should see traffic statistics every 5 seconds, on both sides,
 if `ipudp` is running normally.
+With `-debug`, every forwarded IP packet produces a line on standard output
+containing a UTC timestamp, the local client or server role, the packet-flow
+event, and the source and destination IP addresses.
 
 ## Overview of Design
 `ipudp` works as follows:
@@ -159,6 +164,10 @@ For logging facilities.
 Modify this if not satisfied with the UI.
 Interface:
 ```
+# module function
+packet_event(role, event, packet):
+    Return a timestamped debug line containing the role, event, and IP addresses.
+
 # class Logger:
 __init__(self, freq, target=sys.stdout):
     [freq] is the frequency to log traffic, in seconds.

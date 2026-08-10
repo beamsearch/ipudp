@@ -22,6 +22,7 @@ auth_msg = b"Infinite Socks Auth"
 tunnel_type = None
 MTU = 1000
 do_random_padding = False
+debug = False
 
 MAX_IP_PACKET_SIZE = 65535
 OUTER_IPV4_HEADER_SIZE = 20
@@ -56,6 +57,8 @@ while i < len(sys.argv):
         MTU = int(sys.argv[i], 10)
     elif sys.argv[i] == '-do-random-padding':
         do_random_padding = True
+    elif sys.argv[i] == '-debug':
+        debug = True
     else:
         raise Exception("unknown option " + sys.argv[i])
     i = i + 1
@@ -109,6 +112,7 @@ else:
     os.putenv("LISTEN_PORT", str(addr[1]))
     setup_script = os.path.join(script_dir, "server.sh")
     cleanup_script = os.path.join(script_dir, "server-cleanup.sh")
+role = "client" if mode == 'c' else "server"
 
 def exit_on_signal(signal, frame):
     raise SystemExit(0)
@@ -138,6 +142,12 @@ try:
                         )
                     )
                 else:
+                    if debug:
+                        traffic_logger.log(logger.packet_event(
+                            role,
+                            "received-ip-from-tun-and-sending-udp",
+                            data
+                        ))
                     tunnel.send(data)
             elif skey.data == 1:
                 data = tunnel.recv()
@@ -149,6 +159,12 @@ try:
                             )
                         )
                     else:
+                        if debug:
+                            traffic_logger.log(logger.packet_event(
+                                role,
+                                "received-udp-and-writing-ip-to-tun",
+                                data
+                            ))
                         written = os.write(tun.fd, data)
                         if written != len(data):
                             raise RuntimeError("incomplete TUN packet write")

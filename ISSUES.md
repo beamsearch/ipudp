@@ -1,0 +1,5 @@
+- The cipher is custom, deterministic, and has no nonce.
+- The authentication prefix is not a cryptographic MAC.
+- There is no integrity protection or replay prevention.
+- It is IPv4-only and supports only one client.
+- Perhaps some more tests should be added.

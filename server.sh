@@ -2,6 +2,8 @@
 
 set -eu
 set -f
+echo "$0 running:"
+set -x
 
 CLIENT_TUN_IP=10.0.1.1
 SERVER_TUN_IP=10.0.1.2

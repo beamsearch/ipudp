@@ -1,6 +1,8 @@
 #!/bin/sh
 
 set -u
+echo "$0 running:"
+set -x
 
 NFT_TABLE=ipudp
 STATE_ROOT=${IPUDP_STATE_DIR:-/run/ipudp}

@@ -2,6 +2,8 @@
 
 set -u
 set -f
+echo "$0 running:"
+set -x
 
 STATE_ROOT=${IPUDP_STATE_DIR:-/run/ipudp}
 

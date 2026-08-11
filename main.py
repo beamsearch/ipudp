@@ -145,7 +145,7 @@ try:
                     if debug:
                         traffic_logger.log(logger.packet_event(
                             role,
-                            "received-ip-from-tun-and-sending-udp",
+                            f"{tun.name}->udp",
                             data
                         ))
                     tunnel.send(data)
@@ -162,7 +162,7 @@ try:
                         if debug:
                             traffic_logger.log(logger.packet_event(
                                 role,
-                                "received-udp-and-writing-ip-to-tun",
+                                f"udp->{tun.name}",
                                 data
                             ))
                         written = os.write(tun.fd, data)

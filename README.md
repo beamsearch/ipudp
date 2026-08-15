@@ -255,6 +255,13 @@ With the same set of available environment variables as `server.sh`
 - `main.py`:
 Entry point. Pretty much just combines the above scripts.
 
+## Relevant docker commands
+```
+docker build -f Dockerfile.client -t ipudp-client .
+docker build -f Dockerfile.server -t ipudp-server .
+```
+
+
 ## Inspirations
 [icmptunnel](https://github.com/dhavalkapil/icmptunnel)
 

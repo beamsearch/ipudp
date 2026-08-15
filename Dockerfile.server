@@ -1,0 +1,19 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y \
+        iproute2 \
+        nftables \
+        procps \
+        python3 \
+        iputils-ping \
+        tcpdump && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /work
+
+CMD python3 main.py \
+    -debug \
+    -key "$IPUDP_KEY" \
+    -server "$IPUDP_PORT" \
+    -tunnel udp

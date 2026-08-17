@@ -82,6 +82,7 @@ class ContainerScriptTests(unittest.TestCase):
             docker_arguments,
         )
         self.assertNotIn("-p", docker_arguments)
+        self.assertNotIn("--sysctl", docker_arguments)
 
     def test_development_publishes_server_port_and_relays_arguments(self):
         main_arguments = [
@@ -98,6 +99,11 @@ class ContainerScriptTests(unittest.TestCase):
 
         port_index = docker_arguments.index("-p")
         self.assertEqual(docker_arguments[port_index + 1], "43210:43210/udp")
+        sysctl_index = docker_arguments.index("--sysctl")
+        self.assertEqual(
+            docker_arguments[sysctl_index + 1],
+            "net.ipv4.ip_forward=1",
+        )
         self.assert_relayed(
             docker_arguments,
             "ipudp-development",
@@ -119,6 +125,11 @@ class ContainerScriptTests(unittest.TestCase):
 
         port_index = docker_arguments.index("-p")
         self.assertEqual(docker_arguments[port_index + 1], "48625:48625/udp")
+        sysctl_index = docker_arguments.index("--sysctl")
+        self.assertEqual(
+            docker_arguments[sysctl_index + 1],
+            "net.ipv4.ip_forward=1",
+        )
         self.assertNotIn("--mount", docker_arguments)
         self.assert_relayed(
             docker_arguments,
@@ -134,6 +145,7 @@ class ContainerScriptTests(unittest.TestCase):
 
         self.assert_relayed(docker_arguments, "ipudp-deployment", [])
         self.assertNotIn("-p", docker_arguments)
+        self.assertNotIn("--sysctl", docker_arguments)
 
 
 if __name__ == "__main__":

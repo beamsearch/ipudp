@@ -272,6 +272,9 @@ docker build -f Dockerfile.development -t ipudp-development .
 All normal `main.py` options, including `-mtu`, `-auth`, `-tun`, `-debug`, and
 `-do-random-padding`, can be supplied in the same way. A `-server SERVER_PORT`
 pair also makes the launcher publish `SERVER_PORT/udp` on the host.
+The server container is created with `net.ipv4.ip_forward=1`; `server.sh`
+changes and restores that setting only when running in a namespace where it was
+initially disabled.
 
 Containers intentionally use an isolated Docker network namespace. A client's
 default-route replacement affects only its container, leaving the host's

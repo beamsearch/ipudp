@@ -53,12 +53,23 @@ fi
 trap 'status=$?; trap - 0 HUP INT TERM; "$script_dir/server-cleanup.sh" || :; exit "$status"' 0
 trap 'exit 1' HUP INT TERM
 
-sysctl -n net.ipv4.ip_forward > "$state_dir/ip-forward"
+ip_forward=$(sysctl -n net.ipv4.ip_forward)
+case "$ip_forward" in
+    0|1) ;;
+    *)
+        echo "invalid net.ipv4.ip_forward value: $ip_forward" >&2
+        exit 1
+        ;;
+esac
+printf '%s\n' "$ip_forward" > "$state_dir/ip-forward"
 : > "$state_dir/active"
 
 ip link set dev "$TUN_NAME" mtu "$TUN_MTU" up
 ip -4 address replace "$SERVER_TUN_IP" peer "$CLIENT_TUN_IP/32" dev "$TUN_NAME"
-sysctl -q -w net.ipv4.ip_forward=1
+if [ "$ip_forward" -eq 0 ]; then
+    : > "$state_dir/ip-forward-changed"
+    sysctl -q -w net.ipv4.ip_forward=1
+fi
 
 nft -f - <<EOF
 add table ip $NFT_TABLE

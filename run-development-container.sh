@@ -20,6 +20,7 @@ if [ -n "$server_port" ]; then
     exec docker run --rm -it \
         --cap-add=NET_ADMIN \
         --device=/dev/net/tun \
+        --sysctl net.ipv4.ip_forward=1 \
         -p "$server_port:$server_port/udp" \
         --mount type=bind,src="$script_dir",dst=/work,readonly \
         ipudp-development "$@"

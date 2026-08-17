@@ -46,7 +46,7 @@ elif command == "nft":
             log.write(sys.stdin.read())
 elif command == "sysctl":
     if arguments == ["-n", "net.ipv4.ip_forward"]:
-        print("0")
+        print(os.environ.get("IPUDP_TEST_IP_FORWARD", "0"))
 '''
 
 
@@ -216,6 +216,14 @@ class NetworkScriptTests(unittest.TestCase):
         self.assertIn("sysctl -q -w net.ipv4.ip_forward=1", command_log)
         self.assertIn("sysctl -q -w net.ipv4.ip_forward=0", command_log)
         self.assertIn("ip -4 address flush dev tun0", command_log)
+
+    def test_server_does_not_write_forwarding_when_already_enabled(self):
+        environment = {"IPUDP_TEST_IP_FORWARD": "1"}
+
+        self.run_script("server.sh", environment)
+        self.run_script("server-cleanup.sh", environment)
+
+        self.assertNotIn("sysctl -q -w", self.command_log())
 
 
 if __name__ == "__main__":

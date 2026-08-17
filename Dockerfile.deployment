@@ -1,0 +1,18 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        iproute2 \
+        nftables \
+        procps \
+        python3 \
+        iputils-ping \
+        tcpdump && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/ipudp
+
+COPY main.py tun.py udp.py crypto.py logger.py ./
+COPY client.sh client-cleanup.sh server.sh server-cleanup.sh ./
+
+ENTRYPOINT ["python3", "/opt/ipudp/main.py"]

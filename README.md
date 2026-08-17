@@ -13,7 +13,7 @@ On the client side, as root or with the required network capabilities:
 python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
     [-do-random-padding] \
-    [-mtu TUNNEL_MTU_DEFAULT_TO_1000] \
+    [-mtu TUNNEL_MTU_DEFAULT_TO_1300] \
     [-debug] \
     [-tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
@@ -255,10 +255,37 @@ With the same set of available environment variables as `server.sh`
 - `main.py`:
 Entry point. Pretty much just combines the above scripts.
 
-## Relevant docker commands
+## Docker
+
+The development image runs the source from a read-only bind mount. The launcher
+passes every argument unchanged to `main.py`:
+
+```sh
+docker build -f Dockerfile.development -t ipudp-development .
+
+./run-development-container.sh -key 0123456789abcdef \
+    -server 48625 -tunnel udp
+./run-development-container.sh -key 0123456789abcdef \
+    -client SERVER_IP:48625 -tunnel udp
 ```
-docker build -f Dockerfile.client -t ipudp-client .
-docker build -f Dockerfile.server -t ipudp-server .
+
+All normal `main.py` options, including `-mtu`, `-auth`, `-tun`, `-debug`, and
+`-do-random-padding`, can be supplied in the same way. A `-server SERVER_PORT`
+pair also makes the launcher publish `SERVER_PORT/udp` on the host.
+
+Containers intentionally use an isolated Docker network namespace. A client's
+default-route replacement affects only its container, leaving the host's
+Internet route unchanged.
+
+The deployment image copies the application source and supports either role:
+
+```sh
+docker build -f Dockerfile.deployment -t ipudp-deployment .
+
+./run-deployment-container.sh -key 0123456789abcdef \
+    -server 48625 -tunnel udp
+./run-deployment-container.sh -key 0123456789abcdef \
+    -client SERVER_IP:48625 -tunnel udp
 ```
 
 

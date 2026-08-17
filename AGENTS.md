@@ -37,6 +37,11 @@ permissions and can replace the default route, enable forwarding, or alter
 nftables rules. Run end-to-end checks only when explicitly requested, using an
 isolated VM or network namespace with a recovery plan.
 
+The Docker launchers intentionally use Docker's isolated network namespace.
+When running a client, its setup and default-route replacement must affect only
+the container, not the host, so the tunnel can be tested without disrupting the
+host's Internet access. Do not add host networking to the containers.
+
 ## Validation
 
 For ordinary Python changes, run:
@@ -50,7 +55,8 @@ python3 -c "from crypto import Encrypter, Decrypter; p=b'round trip'; e=Encrypte
 For shell-only changes, perform syntax checks without executing the scripts:
 
 ```sh
-sh -n client.sh client-cleanup.sh server.sh server-cleanup.sh
+sh -n client.sh client-cleanup.sh server.sh server-cleanup.sh \
+    run-development-container.sh run-deployment-container.sh
 ```
 
 Add focused standard-library `unittest` coverage when changing behavior that can

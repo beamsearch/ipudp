@@ -20,7 +20,7 @@ key = None
 auth_msg = b"Infinite Socks Auth"
 
 tunnel_type = None
-MTU = 1000
+MTU = 1300
 do_random_padding = False
 debug = False
 

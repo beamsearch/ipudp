@@ -17,6 +17,8 @@ done
 
 if [ -n "$server_port" ]; then
     exec docker run --rm -it \
+        --dns 8.8.8.8 \
+        --dns 8.8.4.4 \
         --cap-add=NET_ADMIN \
         --device=/dev/net/tun \
         --sysctl net.ipv4.ip_forward=1 \
@@ -24,6 +26,8 @@ if [ -n "$server_port" ]; then
         ipudp-deployment "$@"
 else
     exec docker run --rm -it \
+        --dns 8.8.8.8 \
+        --dns 8.8.4.4 \
         --cap-add=NET_ADMIN \
         --device=/dev/net/tun \
         ipudp-deployment "$@"

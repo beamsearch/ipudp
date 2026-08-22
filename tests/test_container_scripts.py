@@ -57,6 +57,14 @@ class ContainerScriptTests(unittest.TestCase):
         image_index = docker_arguments.index(image)
         self.assertEqual(docker_arguments[image_index + 1:], main_arguments)
 
+    def assert_dns_servers(self, docker_arguments, image):
+        dns_servers = []
+        image_index = docker_arguments.index(image)
+        for index, argument in enumerate(docker_arguments[:image_index]):
+            if argument == "--dns":
+                dns_servers.append(docker_arguments[index + 1])
+        self.assertEqual(dns_servers, ["8.8.8.8", "8.8.4.4"])
+
     def test_development_relays_client_arguments_and_mounts_source(self):
         main_arguments = [
             "-key", "0123abcd",
@@ -83,6 +91,7 @@ class ContainerScriptTests(unittest.TestCase):
         )
         self.assertNotIn("-p", docker_arguments)
         self.assertNotIn("--sysctl", docker_arguments)
+        self.assert_dns_servers(docker_arguments, "ipudp-development")
 
     def test_development_publishes_server_port_and_relays_arguments(self):
         main_arguments = [
@@ -109,6 +118,7 @@ class ContainerScriptTests(unittest.TestCase):
             "ipudp-development",
             main_arguments,
         )
+        self.assert_dns_servers(docker_arguments, "ipudp-development")
 
     def test_deployment_publishes_server_port_without_mount(self):
         main_arguments = [
@@ -136,6 +146,7 @@ class ContainerScriptTests(unittest.TestCase):
             "ipudp-deployment",
             main_arguments,
         )
+        self.assert_dns_servers(docker_arguments, "ipudp-deployment")
 
     def test_deployment_adds_no_main_arguments(self):
         _, docker_arguments = self.run_script(
@@ -146,6 +157,7 @@ class ContainerScriptTests(unittest.TestCase):
         self.assert_relayed(docker_arguments, "ipudp-deployment", [])
         self.assertNotIn("-p", docker_arguments)
         self.assertNotIn("--sysctl", docker_arguments)
+        self.assert_dns_servers(docker_arguments, "ipudp-deployment")
 
 
 if __name__ == "__main__":

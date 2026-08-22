@@ -280,6 +280,12 @@ Containers intentionally use an isolated Docker network namespace. A client's
 default-route replacement affects only its container, leaving the host's
 Internet route unchanged.
 
+Both launchers configure client and server containers to use Google Public DNS
+at `8.8.8.8` and `8.8.4.4`. These are conventional plaintext DNS resolvers,
+using UDP or TCP port 53 rather than DNS over HTTPS or DNS over TLS. Client DNS
+traffic crosses the tunnel after the client route is installed, but it leaves
+the tunnel server as plaintext DNS.
+
 The deployment image copies the application source and supports either role:
 
 ```sh

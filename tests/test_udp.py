@@ -42,6 +42,15 @@ class SocketStub:
         self.sent = (bytes(data), address)
 
 
+class FailingSocketStub(SocketStub):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def sendto(self, data, address):
+        raise self.error
+
+
 class RandomStub:
     def __init__(self, result):
         self.result = result
@@ -103,6 +112,22 @@ class UDPTunTests(unittest.TestCase):
         self.assertIn("11 bytes", tunnel.logger.messages[0])
         self.assertIn("MTU is 10", tunnel.logger.messages[0])
 
+    def test_socket_error_is_logged_and_not_counted_as_traffic(self):
+        tunnel = make_tunnel()
+        tunnel.socket = FailingSocketStub(OSError("network unavailable"))
+
+        tunnel.send(b"data")
+
+        self.assertIn("network unavailable", tunnel.logger.messages[0])
+        self.assertEqual(tunnel.logger.traffic, [])
+
+    def test_unexpected_send_error_propagates(self):
+        tunnel = make_tunnel()
+        tunnel.socket = FailingSocketStub(RuntimeError("unexpected"))
+
+        with self.assertRaisesRegex(RuntimeError, "unexpected"):
+            tunnel.send(b"data")
+
     def test_receive_reads_and_validates_complete_padded_datagram(self):
         tunnel = make_tunnel()
         sender = ("authenticated", 3000)
@@ -122,7 +147,7 @@ class UDPTunTests(unittest.TestCase):
 
         self.assertIsNone(tunnel.recv())
         self.assertEqual(tunnel.remote_addr, ("previous", 2000))
-        self.assertIn("11 bytes", tunnel.logger.messages[0])
+        self.assertIn("11 padded bytes", tunnel.logger.messages[0])
 
     def test_padding_larger_than_mtu_is_rejected(self):
         tunnel = make_tunnel()

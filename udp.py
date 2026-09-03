@@ -1,4 +1,3 @@
-
 import os
 import socket
 import struct
@@ -36,7 +35,7 @@ class UDPTun:
     def send(self, data):
         if len(data) > self.MTU:
             self.logger.log(
-                "dropping packet of {} bytes; configured MTU is {}".format(
+                    "UDPTun.send: dropping packet of {} bytes; configured MTU is {}".format(
                     len(data), self.MTU
                 )
             )
@@ -57,9 +56,12 @@ class UDPTun:
             self.encrypter.reset()
             self.encrypter.encrypt_in_place(msg)
 
-            self.socket.sendto(msg, self.remote_addr)
-
-            self.logger.add_traffic('o', len(msg))
+            try:
+                self.socket.sendto(msg, self.remote_addr)
+            except OSError as ex:
+                self.logger.log(f'UDPTun.send: socket.sendto reported this error: {ex}')
+            else:
+                self.logger.add_traffic('o', len(msg))
 
     def recv(self):
         msg, remote_addr = self.socket.recvfrom(MAX_UDP_PAYLOAD_SIZE)
@@ -72,19 +74,12 @@ class UDPTun:
             self.logger.log("invalid packet from " + str(remote_addr) + ": too short")
             return None
         elif msg[0:len(self.auth_msg)] != self.auth_msg:
-            self.logger.log("authentication failure from " + str(remote_addr))
+            self.logger.log("could not decrypt packet from peer " + str(remote_addr))
             return None
 
         data_size = struct.unpack('<H', msg[len(self.auth_msg):header_size])[0]
         padded_data_size = len(msg) - header_size
-        if data_size > self.MTU:
-            self.logger.log(
-                "dropping packet from {} containing {} bytes; configured MTU is {}".format(
-                    remote_addr, data_size, self.MTU
-                )
-            )
-            return None
-        elif padded_data_size > self.MTU:
+        if padded_data_size > self.MTU:
             self.logger.log(
                 "dropping packet from {} with {} padded bytes; configured MTU is {}".format(
                     remote_addr, padded_data_size, self.MTU

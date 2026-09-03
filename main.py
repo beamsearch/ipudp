@@ -133,41 +133,23 @@ try:
         for (skey, mask) in sel.select():
             if skey.data == 0:
                 data = os.read(tun.fd, MAX_IP_PACKET_SIZE)
-                if len(data) == 0:
-                    raise RuntimeError("TUN device closed")
-                elif len(data) > MTU:
-                    traffic_logger.log(
-                        "dropping TUN packet of {} bytes; configured MTU is {}".format(
-                            len(data), MTU
-                        )
-                    )
-                else:
-                    if debug:
-                        traffic_logger.log(logger.packet_event(
-                            role,
-                            f"{tun.name}->udp",
-                            data
-                        ))
-                    tunnel.send(data)
+                if debug:
+                    traffic_logger.log(logger.packet_event(
+                        role,
+                        f"{tun.name}->udp",
+                        data
+                    ))
+                tunnel.send(data)
             elif skey.data == 1:
                 data = tunnel.recv()
                 if data is not None:
-                    if len(data) > MTU:
-                        traffic_logger.log(
-                            "dropping UDP packet containing {} bytes; configured MTU is {}".format(
-                                len(data), MTU
-                            )
-                        )
-                    else:
-                        if debug:
-                            traffic_logger.log(logger.packet_event(
-                                role,
-                                f"udp->{tun.name}",
-                                data
-                            ))
-                        written = os.write(tun.fd, data)
-                        if written != len(data):
-                            raise RuntimeError("incomplete TUN packet write")
+                    if debug:
+                        traffic_logger.log(logger.packet_event(
+                            role,
+                            f"udp->{tun.name}",
+                            data
+                        ))
+                    os.write(tun.fd, data)
 finally:
     if setup_complete:
         subprocess.run([cleanup_script], check=True)

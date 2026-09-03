@@ -8,9 +8,12 @@ Both local client and the remote server should run Linux as the operating system
 Only one client can connect to the server at a time.
 
 ## Usage
+Python 3.6 or newer is required. The Python implementation uses only the
+standard library.
+
 On the client side, as root or with the required network capabilities:
 ```
-python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
+python3 main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
     [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
     [-do-random-padding] \
     [-mtu TUNNEL_MTU_DEFAULT_TO_1300] \
@@ -19,7 +22,7 @@ python main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
 ```
 On the server side, as root or with the required network capabilities:
 ```
-python main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
+python3 main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
     [-auth SAME_AUTH_MESSAGE_AS_CLIENT] \
     [-do-random-padding] \
     [-mtu SAME_TUNNEL_MTU_AS_CLIENT] \

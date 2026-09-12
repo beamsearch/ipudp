@@ -125,9 +125,8 @@ case "$underlay_mtu" in
 esac
 
 if [ "$underlay_mtu" -lt "$MINIMUM_REQUIRED_UNDERLAY_MTU" ]; then
-    echo "underlay MTU $underlay_mtu on $remote_device is smaller than required" >&2
-    echo "minimum required underlay MTU is $MINIMUM_REQUIRED_UNDERLAY_MTU for tunnel MTU $TUN_MTU" >&2
-    exit 1
+    echo "WARNING underlay MTU $underlay_mtu on $remote_device is smaller than required" >&2
+    echo "WARNING minimum required underlay MTU is $MINIMUM_REQUIRED_UNDERLAY_MTU for tunnel MTU $TUN_MTU" >&2
 fi
 
 : > "$state_dir/active"

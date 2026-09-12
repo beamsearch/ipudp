@@ -1,4 +1,3 @@
-
 import sys
 import signal
 import os
@@ -19,7 +18,7 @@ addr = None
 key = None
 auth_msg = b"Infinite Socks Auth"
 
-tunnel_type = None
+tunnel_type = 'udp'
 MTU = 1300
 do_random_padding = False
 debug = False
@@ -63,14 +62,12 @@ while i < len(sys.argv):
         raise Exception("unknown option " + sys.argv[i])
     i = i + 1
 
+traffic_logger = logger.Logger(float('inf') if debug else 5)
 if mode is None:
     print("no mode specified")
     exit(1)
 elif key is None:
     print("so key specified")
-    exit(1)
-elif tunnel_type is None:
-    print("no tunnel type specified")
     exit(1)
 elif MTU < 68:
     print("MTU must be at least 68")
@@ -79,7 +76,6 @@ elif MTU + len(auth_msg) + PAYLOAD_LENGTH_FIELD_SIZE > udp.MAX_UDP_PAYLOAD_SIZE:
     print("MTU and authentication message exceed the IPv4 UDP payload limit")
     exit(1)
 elif tunnel_type == 'udp':
-    traffic_logger = logger.Logger(5)
     tunnel = udp.UDPTun(
         mode, addr,
         crypto.Encrypter(key), crypto.Decrypter(key), auth_msg,

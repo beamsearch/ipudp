@@ -67,11 +67,11 @@ class ContainerScriptTests(unittest.TestCase):
 
     def test_development_relays_client_arguments_and_mounts_source(self):
         main_arguments = [
-            "-key", "0123abcd",
-            "-client", "198.51.100.20:48625",
-            "-tunnel", "udp",
-            "-tun", "name with spaces",
-            "-unknown-option",
+            "--key", "0123abcd",
+            "--connect-to", "198.51.100.20:48625",
+            "--tunnel", "udp",
+            "--tun", "name with spaces",
+            "--unknown-option",
         ]
 
         result, docker_arguments = self.run_script(
@@ -95,10 +95,10 @@ class ContainerScriptTests(unittest.TestCase):
 
     def test_development_publishes_server_port_and_relays_arguments(self):
         main_arguments = [
-            "-debug",
-            "-server", "43210",
-            "-key", "0123abcd",
-            "-tunnel", "udp",
+            "--debug",
+            "--listen-at", "43210",
+            "--key", "0123abcd",
+            "--tunnel", "udp",
         ]
 
         _, docker_arguments = self.run_script(
@@ -122,10 +122,10 @@ class ContainerScriptTests(unittest.TestCase):
 
     def test_deployment_publishes_server_port_without_mount(self):
         main_arguments = [
-            "-key", "0123abcd",
-            "-server", "48625",
-            "-tunnel", "udp",
-            "-do-random-padding",
+            "--key", "0123abcd",
+            "--listen-at", "48625",
+            "--tunnel", "udp",
+            "--do-random-padding",
         ]
 
         _, docker_arguments = self.run_script(

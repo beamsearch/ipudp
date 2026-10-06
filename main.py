@@ -28,30 +28,30 @@ UDP_HEADER_SIZE = 8
 
 i = 1
 while i < len(sys.argv):
-    if sys.argv[i] == '-tun':
+    if sys.argv[i] == '--tun':
         i = i + 1
         tun_name = sys.argv[i]
-    elif sys.argv[i] == '-client':
+    elif sys.argv[i] == '--connect-to':
         mode = 'c'
         i = i + 1
         ip_and_port = sys.argv[i].split(sep=':', maxsplit=2)
         addr = (ip_and_port[0], int(ip_and_port[1], 10))
-    elif sys.argv[i] == '-server':
+    elif sys.argv[i] == '--listen-at':
         mode = 's'
         i = i + 1
         addr = ("", int(sys.argv[i], 10))
-    elif sys.argv[i] == '-key':
+    elif sys.argv[i] == '--key':
         i = i + 1
         key = int(sys.argv[i], 16)
-    elif sys.argv[i] == '-tunnel':
+    elif sys.argv[i] == '--tunnel':
         i = i + 1
         tunnel_type = sys.argv[i]
-    elif sys.argv[i] == '-mtu':
+    elif sys.argv[i] == '--mtu':
         i = i + 1
         MTU = int(sys.argv[i], 10)
-    elif sys.argv[i] == '-do-random-padding':
+    elif sys.argv[i] == '--do-random-padding':
         do_random_padding = True
-    elif sys.argv[i] == '-debug':
+    elif sys.argv[i] == '--debug':
         debug = True
     else:
         raise Exception("unknown option " + sys.argv[i])

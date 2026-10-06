@@ -10,7 +10,7 @@ for argument do
     if [ "$next_is_server_port" -eq 1 ]; then
         server_port=$argument
         next_is_server_port=0
-    elif [ "$argument" = "-server" ]; then
+    elif [ "$argument" = "--listen-at" ]; then
         next_is_server_port=1
     fi
 done

@@ -13,26 +13,26 @@ standard library.
 
 On the client side, as root or with the required network capabilities:
 ```
-python3 main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
-    [-do-random-padding] \
-    [-mtu TUNNEL_MTU_DEFAULT_TO_1300] \
-    [-debug] \
-    [-tun THE_NAME_OF_THE_TUN_DEVICE]
+python3 main.py --key 64BIT_HEX_KEY --connect-to SERVER_IP:SERVER_PORT --tunnel udp \
+    [--do-random-padding] \
+    [--mtu TUNNEL_MTU_DEFAULT_TO_1300] \
+    [--debug] \
+    [--tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 On the server side, as root or with the required network capabilities:
 ```
-python3 main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
-    [-do-random-padding] \
-    [-mtu SAME_TUNNEL_MTU_AS_CLIENT] \
-    [-debug] \
-    [-tun THE_NAME_OF_THE_TUN_DEVICE]
+python3 main.py --key SAME_KEY_AS_CLIENT --listen-at SERVER_PORT --tunnel udp \
+    [--do-random-padding] \
+    [--mtu SAME_TUNNEL_MTU_AS_CLIENT] \
+    [--debug] \
+    [--tun THE_NAME_OF_THE_TUN_DEVICE]
 ```
 You must turn off reverse path filtering on your server system,
 and make sure that the `SERVER_PORT` is open.
 The setup scripts require `iproute2`, `nftables`, and `sysctl`.
 They configure a point-to-point link using `10.0.1.1` on the client and
 `10.0.1.2` on the server, with each peer represented as a `/32` route.
-The `-mtu` value is applied to both TUN interfaces and must match on both peers.
+The `--mtu` value is applied to both TUN interfaces and must match on both peers.
 The client warns and continues setup if the configured MTU plus the outer
 IPv4, UDP, nonce, and end-marker overhead exceeds the route MTU to the server
 (or the interface MTU when no route-specific MTU is available). It keeps the
@@ -47,8 +47,8 @@ Set `IPUDP_STATE_DIR` to use another state directory. If setup or cleanup fails,
 the program exits with an error instead of continuing with partial network
 configuration.
 
-Without `-debug`, you should see traffic statistics every 5 seconds, on both
-sides, if `ipudp` is running normally.  With `-debug`, every forwarded IP
+Without `--debug`, you should see traffic statistics every 5 seconds, on both
+sides, if `ipudp` is running normally.  With `--debug`, every forwarded IP
 packet produces a line on standard output containing a UTC timestamp, the local
 client or server role, the packet-flow event, and the source and destination IP
 addresses.
@@ -112,7 +112,7 @@ That's also the encouraged way to use this tool.
 Just take it as a cryptographic mind-storming ;)
 
 - To avoid traffic pattern analysis (usually based on packet size),
-`ipudp` offers optional random padding. With `-do-random-padding`, each IP
+`ipudp` offers optional random padding. With `--do-random-padding`, each IP
 packet smaller than the tunnel MTU receives a uniformly selected number of
 padding bytes between zero and the remaining space. The padding bytes come from
 the operating system's random source, and the padded data area never exceeds the
@@ -262,14 +262,14 @@ passes every argument unchanged to `main.py`:
 ```sh
 docker build -f Dockerfile.development -t ipudp-development .
 
-./run-development-container.sh -key 0123456789abcdef \
-    -server 48625 -tunnel udp
-./run-development-container.sh -key 0123456789abcdef \
-    -client SERVER_IP:48625 -tunnel udp
+./run-development-container.sh --key 0123456789abcdef \
+    --listen-at 48625 --tunnel udp
+./run-development-container.sh --key 0123456789abcdef \
+    --connect-to SERVER_IP:48625 --tunnel udp
 ```
 
-All normal `main.py` options, including `-mtu`, `-tun`, `-debug`, and
-`-do-random-padding`, can be supplied in the same way. A `-server SERVER_PORT`
+All normal `main.py` options, including `--mtu`, `--tun`, `--debug`, and
+`--do-random-padding`, can be supplied in the same way. A `--listen-at SERVER_PORT`
 pair also makes the launcher publish `SERVER_PORT/udp` on the host.
 The server container is created with `net.ipv4.ip_forward=1`; `server.sh`
 changes and restores that setting only when running in a namespace where it was
@@ -290,10 +290,10 @@ The deployment image copies the application source and supports either role:
 ```sh
 docker build -f Dockerfile.deployment -t ipudp-deployment .
 
-./run-deployment-container.sh -key 0123456789abcdef \
-    -server 48625 -tunnel udp
-./run-deployment-container.sh -key 0123456789abcdef \
-    -client SERVER_IP:48625 -tunnel udp
+./run-deployment-container.sh --key 0123456789abcdef \
+    --listen-at 48625 --tunnel udp
+./run-deployment-container.sh --key 0123456789abcdef \
+    --connect-to SERVER_IP:48625 --tunnel udp
 ```
 
 

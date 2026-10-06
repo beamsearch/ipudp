@@ -32,7 +32,7 @@ class Encrypter:
             frag_int = struct.unpack('<Q', frag)[0]
             dest_int = (frag_int ^ self.key) % INT64_MAX
             data[i:i+frag_len] = struct.pack('<Q', dest_int)[0:frag_len]
-            self.key = (frag_int + self.key) ** 3 % INT64_MAX
+            self.key = (self.key * 6364136223846793005 + dest_int) % INT64_MAX
             i = i + 8
 
 class Decrypter:
@@ -62,5 +62,5 @@ class Decrypter:
             frag_int = struct.unpack('<Q', frag)[0]
             dest_int = (frag_int ^ self.key) % INT64_MAX
             data[i:i+frag_len] = struct.pack('<Q', dest_int)[0:frag_len]
-            self.key = (dest_int + self.key) ** 3 % INT64_MAX
+            self.key = (self.key * 6364136223846793005 + frag_int) % INT64_MAX
             i = i + 8

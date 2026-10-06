@@ -4,13 +4,16 @@ import struct
 import random
 
 MAX_UDP_PAYLOAD_SIZE = 65507
+NONCE_SIZE = 8
+DATA_END = b"data-end"
+FRAMING_OVERHEAD = NONCE_SIZE + len(DATA_END)
 PADDING_RANDOM = random.SystemRandom()
 
 class UDPTun:
     def __init__(
         self,
         mode, addr,
-        encrypter, decrypter, auth_msg,
+        encrypter, decrypter,
         MTU,
         do_random_padding,
         logger
@@ -19,7 +22,6 @@ class UDPTun:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.encrypter = encrypter
         self.decrypter = decrypter
-        self.auth_msg = auth_msg
         self.MTU = MTU
         self.do_random_padding = do_random_padding
         self.logger = logger
@@ -46,12 +48,11 @@ class UDPTun:
             if self.do_random_padding and len(data) < self.MTU:
                 padding_size = PADDING_RANDOM.randint(0, self.MTU - len(data))
 
-            msg = bytearray(len(data) + padding_size + len(self.auth_msg) + 2)
-            msg[0:len(self.auth_msg)] = self.auth_msg
-            msg[len(self.auth_msg):len(self.auth_msg)+2] = struct.pack('<H', len(data))
-            msg[len(self.auth_msg)+2:len(self.auth_msg)+2+len(data)] = data
+            msg = bytearray(os.urandom(NONCE_SIZE))
+            msg.extend(data)
             if padding_size > 0:
-                msg[len(self.auth_msg)+2+len(data):] = os.urandom(padding_size)
+                msg.extend(os.urandom(padding_size))
+            msg.extend(DATA_END)
 
             self.encrypter.reset()
             self.encrypter.encrypt_in_place(msg)
@@ -69,16 +70,15 @@ class UDPTun:
         self.decrypter.reset()
         msg = self.decrypter.decrypt(msg)
 
-        header_size = len(self.auth_msg) + 2
-        if len(msg) < header_size:
-            self.logger.log("invalid packet from " + str(remote_addr) + ": too short")
-            return None
-        elif msg[0:len(self.auth_msg)] != self.auth_msg:
+        if not msg.endswith(DATA_END):
             self.logger.log("could not decrypt packet from peer " + str(remote_addr))
             return None
+        if len(msg) < FRAMING_OVERHEAD + 1:
+            self.logger.log("invalid packet from " + str(remote_addr) + ": too short")
+            return None
 
-        data_size = struct.unpack('<H', msg[len(self.auth_msg):header_size])[0]
-        padded_data_size = len(msg) - header_size
+        data = msg[NONCE_SIZE:-len(DATA_END)]
+        padded_data_size = len(data)
         if padded_data_size > self.MTU:
             self.logger.log(
                 "dropping packet from {} with {} padded bytes; configured MTU is {}".format(
@@ -86,7 +86,21 @@ class UDPTun:
                 )
             )
             return None
-        elif data_size > padded_data_size:
+
+        version = data[0] >> 4
+        if version == 4 and len(data) >= 20:
+            header_size = (data[0] & 15) * 4
+            data_size = struct.unpack('!H', data[2:4])[0]
+            if header_size < 20 or data_size < header_size:
+                self.logger.log("invalid IPv4 length from " + str(remote_addr))
+                return None
+        elif version == 6 and len(data) >= 40:
+            data_size = 40 + struct.unpack('!H', data[4:6])[0]
+        else:
+            self.logger.log("invalid or truncated IP header from " + str(remote_addr))
+            return None
+
+        if data_size > padded_data_size:
             self.logger.log(
                 "invalid packet from {}: declared {} bytes but received {}".format(
                     remote_addr, data_size, padded_data_size
@@ -96,4 +110,4 @@ class UDPTun:
 
         self.remote_addr = remote_addr
         self.logger.add_traffic('i', len(msg))
-        return msg[header_size:header_size+data_size]
+        return data[:data_size]

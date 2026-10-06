@@ -70,7 +70,7 @@ class ContainerScriptTests(unittest.TestCase):
             "-key", "0123abcd",
             "-client", "198.51.100.20:48625",
             "-tunnel", "udp",
-            "-auth", "message with spaces",
+            "-tun", "name with spaces",
             "-unknown-option",
         ]
 

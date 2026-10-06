@@ -14,7 +14,6 @@ standard library.
 On the client side, as root or with the required network capabilities:
 ```
 python3 main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
-    [-auth VARIABLE_LENGTH_AUTHENTICATION_MESSAGE] \
     [-do-random-padding] \
     [-mtu TUNNEL_MTU_DEFAULT_TO_1300] \
     [-debug] \
@@ -23,7 +22,6 @@ python3 main.py -key 64BIT_HEX_KEY -client SERVER_IP:SERVER_PORT -tunnel udp \
 On the server side, as root or with the required network capabilities:
 ```
 python3 main.py -key SAME_KEY_AS_CLIENT -server SERVER_PORT -tunnel udp \
-    [-auth SAME_AUTH_MESSAGE_AS_CLIENT] \
     [-do-random-padding] \
     [-mtu SAME_TUNNEL_MTU_AS_CLIENT] \
     [-debug] \
@@ -35,12 +33,13 @@ The setup scripts require `iproute2`, `nftables`, and `sysctl`.
 They configure a point-to-point link using `10.0.1.1` on the client and
 `10.0.1.2` on the server, with each peer represented as a `/32` route.
 The `-mtu` value is applied to both TUN interfaces and must match on both peers.
-The client rejects a value larger than its route to the server can carry after
-the outer IPv4, UDP, length-field, and authentication-message overhead is
-subtracted. A smaller path MTU beyond the directly connected interface may
+The client warns and continues setup if the configured MTU plus the outer
+IPv4, UDP, nonce, and end-marker overhead exceeds the route MTU to the server
+(or the interface MTU when no route-specific MTU is available). It keeps the
+configured tunnel MTU unchanged. A smaller path MTU beyond the directly connected interface may
 still require selecting a more conservative value manually.
-For example, a 1500-byte underlay and the default 19-byte authentication message
-allow a maximum tunnel MTU of 1451 bytes.
+For example, a 1500-byte underlay allows a tunnel MTU of up to 1456 bytes without exceeding that limit
+(20 bytes IPv4 + 8 bytes UDP + 16 bytes framing overhead).
 
 Runtime state is stored under `/run/ipudp` so cleanup can restore the client's
 original default routes and the server's original IPv4 forwarding setting.
@@ -48,11 +47,11 @@ Set `IPUDP_STATE_DIR` to use another state directory. If setup or cleanup fails,
 the program exits with an error instead of continuing with partial network
 configuration.
 
-You should see traffic statistics every 5 seconds, on both sides,
-if `ipudp` is running normally.
-With `-debug`, every forwarded IP packet produces a line on standard output
-containing a UTC timestamp, the local client or server role, the packet-flow
-event, and the source and destination IP addresses.
+Without `-debug`, you should see traffic statistics every 5 seconds, on both
+sides, if `ipudp` is running normally.  With `-debug`, every forwarded IP
+packet produces a line on standard output containing a UTC timestamp, the local
+client or server role, the packet-flow event, and the source and destination IP
+addresses.
 
 ## Overview of Design
 `ipudp` works as follows:
@@ -85,11 +84,20 @@ Again, the tunneling part is designed to be modular.
 When UDP is not the best option,
 switching to other protocols like TCP or ICMP should be easy.
 
-  Multi-byte fields in the UDP packet format use little-endian byte order: the
-  payload length is an unsigned 16-bit integer, and the cipher operates on
-  unsigned 64-bit blocks. This is wire-compatible with older versions on
-  little-endian systems. Older peers running on big-endian systems must be
-  updated at both ends.
+  Each UDP payload is the encryption of this complete layout:
+  `8-byte random nonce | IP packet | optional random padding | data-end`.
+  The nonce is freshly generated from the operating system's random source for
+  every packet. The final marker is exactly eight ASCII bytes (`data-end`).
+  The cipher resets before each datagram and uses little-endian 64-bit blocks.
+  After decryption, a missing final marker is treated as a decryption failure.
+  The receiver extracts the IP packet using IPv4's Total Length field or
+  40 plus IPv6's Payload Length field, both in network byte order, discarding
+  padding. Invalid/truncated headers and lengths exceeding the available data
+  are rejected. IPv6 jumbograms cannot fit within the UDP payload limit and are
+  not supported.
+
+  This format is incompatible with the previous authentication-prefix and
+  explicit-length format. Upgrade both peers together; `-auth` has been removed.
 
 - Instead of using complicated ciphers like AES, TLS, etc.. `ipudp` uses a very simple
 reactive (stream cipher with key stream dependent on all previous plaintext bytes as well)
@@ -110,22 +118,10 @@ padding bytes between zero and the remaining space. The padding bytes come from
 the operating system's random source, and the padded data area never exceeds the
 tunnel MTU. Padding is disabled by default.
 
-- To act against active sniffing, `ipudp` offers simple authentication mechanism.
-Client and server should pre-share a variable length authentication message,
-and that message would appear in every UDP packet.
-Packets that fail to authenticate will be ignored by the server,
-as if the server is not responsive.
-While this authentication method introduces more traffic overhead,
-it completely eliminates the traffic pattern of hand-shaking.
-Smarter authentication methods can be integrated easily, of course.
-
-In general, `ipudp` does not try to be general, or make the best decision everywhere.
-Instead, it tries to be a framework which allow various design options to be altered easily.
-So you are highly encouraged to read and modify the (very short) code to make it suit your need better.
-The ultimate idea is,
-one mono protocol is still possible to crack, no matter how robust it is.
-But it is impossible to crack hundreds, or even thousands of potentially broken,
-but different protocols.
+- The fixed `data-end` marker provides a simple decryption check, not a
+  cryptographic authentication guarantee. The custom cipher and marker are not
+production-grade cryptography. Current approach completely eliminates the
+traffic pattern of hand-shaking.
 
 ## Function of Files
 - `tun.py`:
@@ -200,7 +196,7 @@ __init__(
     mode, # 'c' for client side, 's' for server side
     addr, # (server_ip, server_port) pair for client side, ("", port) for server side
     encrypter, decrypter, # with the interface described above
-    auth_msg, MTU,
+    MTU,
     do_random_padding, # whether random padding is enabled
     logger # as described above
 ): initializer
@@ -210,10 +206,10 @@ socket:
     A possible improvement would be to make the whole class selectors-compatible.
 
 send(self, data): Send data over the tunnel. len(data) <= self.MTU.
-    Should handle insertion of authentication message, encryption, and padding
+    Should handle nonce generation, encryption, padding, and end-marker insertion
     
 recv(self): Block and return the next received packet.
-    Should handle verification of authentication message, decryption, and unpadding
+    Should handle decryption, end-marker verification, and IP-length-based unpadding
 ```
 - `client.sh`:
 Client initialization script.
@@ -272,7 +268,7 @@ docker build -f Dockerfile.development -t ipudp-development .
     -client SERVER_IP:48625 -tunnel udp
 ```
 
-All normal `main.py` options, including `-mtu`, `-auth`, `-tun`, `-debug`, and
+All normal `main.py` options, including `-mtu`, `-tun`, `-debug`, and
 `-do-random-padding`, can be supplied in the same way. A `-server SERVER_PORT`
 pair also makes the launcher publish `SERVER_PORT/udp` on the host.
 The server container is created with `net.ipv4.ip_forward=1`; `server.sh`
@@ -303,6 +299,3 @@ docker build -f Dockerfile.deployment -t ipudp-deployment .
 
 ## Inspirations
 [icmptunnel](https://github.com/dhavalkapil/icmptunnel)
-
-## License
-0BSD

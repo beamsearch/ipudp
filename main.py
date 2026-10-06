@@ -16,7 +16,6 @@ mode = None
 addr = None
 
 key = None
-auth_msg = b"Infinite Socks Auth"
 
 tunnel_type = 'udp'
 MTU = 1300
@@ -26,7 +25,6 @@ debug = False
 MAX_IP_PACKET_SIZE = 65535
 OUTER_IPV4_HEADER_SIZE = 20
 UDP_HEADER_SIZE = 8
-PAYLOAD_LENGTH_FIELD_SIZE = 2
 
 i = 1
 while i < len(sys.argv):
@@ -45,9 +43,6 @@ while i < len(sys.argv):
     elif sys.argv[i] == '-key':
         i = i + 1
         key = int(sys.argv[i], 16)
-    elif sys.argv[i] == '-auth':
-        i = i + 1
-        auth_msg = sys.argv[i].encode('utf-8')
     elif sys.argv[i] == '-tunnel':
         i = i + 1
         tunnel_type = sys.argv[i]
@@ -72,13 +67,13 @@ elif key is None:
 elif MTU < 68:
     print("MTU must be at least 68")
     exit(1)
-elif MTU + len(auth_msg) + PAYLOAD_LENGTH_FIELD_SIZE > udp.MAX_UDP_PAYLOAD_SIZE:
-    print("MTU and authentication message exceed the IPv4 UDP payload limit")
+elif MTU + udp.FRAMING_OVERHEAD > udp.MAX_UDP_PAYLOAD_SIZE:
+    print("MTU and framing overhead exceed the IPv4 UDP payload limit")
     exit(1)
 elif tunnel_type == 'udp':
     tunnel = udp.UDPTun(
         mode, addr,
-        crypto.Encrypter(key), crypto.Decrypter(key), auth_msg,
+        crypto.Encrypter(key), crypto.Decrypter(key),
         MTU,
         do_random_padding,
         traffic_logger
@@ -92,7 +87,7 @@ os.putenv("TUN_NAME", tun.name)
 os.putenv("TUN_MTU", str(MTU))
 minimum_required_underlay_mtu = (
     MTU + OUTER_IPV4_HEADER_SIZE + UDP_HEADER_SIZE
-    + PAYLOAD_LENGTH_FIELD_SIZE + len(auth_msg)
+    + udp.FRAMING_OVERHEAD
 )
 os.putenv(
     "MINIMUM_REQUIRED_UNDERLAY_MTU",

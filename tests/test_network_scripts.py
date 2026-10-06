@@ -149,34 +149,57 @@ class NetworkScriptTests(unittest.TestCase):
         )
         self.assertIn("ip -4 address flush dev tun0", command_log)
 
-    def test_client_rejects_mtu_larger_than_underlay_allows(self):
+    def test_client_warns_and_continues_when_mtu_exceeds_underlay(self):
         environment = {
             "REMOTE_IP": "203.0.113.10",
-            "TUN_MTU": "1452",
+            "TUN_MTU": "1457",
             "MINIMUM_REQUIRED_UNDERLAY_MTU": "1501",
         }
 
-        self.assertNotEqual(self.call_script("client.sh", environment), 0)
-        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "client-tun0")))
-        self.assertNotIn(
-            "ip link set dev tun0 mtu 1452 up",
-            self.command_log(),
-        )
+        self.assert_mtu_warning_and_setup(environment, 1500)
+        self.assertIn("ip -o link show dev eth0", self.command_log())
 
     def test_client_prefers_route_specific_mtu(self):
         environment = {
             "REMOTE_IP": "203.0.113.10",
-            "TUN_MTU": "1352",
+            "TUN_MTU": "1357",
             "MINIMUM_REQUIRED_UNDERLAY_MTU": "1401",
             "IPUDP_TEST_ROUTE_MTU": "lock 1400",
         }
 
-        self.assertNotEqual(self.call_script("client.sh", environment), 0)
-        self.assertFalse(os.path.exists(os.path.join(self.state_dir, "client-tun0")))
-        self.assertNotIn(
-            "ip -o link show dev eth0",
-            self.command_log(),
+        self.assert_mtu_warning_and_setup(environment, 1400)
+        self.assertNotIn("ip -o link show dev eth0", self.command_log())
+
+    def assert_mtu_warning_and_setup(self, extra_environment, underlay_mtu):
+        environment = self.environment.copy()
+        environment.update(extra_environment)
+        result = subprocess.run(
+            [os.path.join(ROOT, "client.sh")], env=environment,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            universal_newlines=True,
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "WARNING underlay MTU {} on eth0 is smaller than required".format(
+                underlay_mtu
+            ),
+            result.stderr.splitlines(),
+        )
+        self.assertIn(
+            "WARNING minimum required underlay MTU is {} for tunnel MTU {}".format(
+                environment["MINIMUM_REQUIRED_UNDERLAY_MTU"], environment["TUN_MTU"]
+            ),
+            result.stderr.splitlines(),
+        )
+        self.assertTrue(os.path.isfile(
+            os.path.join(self.state_dir, "client-tun0", "active")
+        ))
+        command_log = self.command_log()
+        self.assertIn(
+            "ip link set dev tun0 mtu {} up".format(environment["TUN_MTU"]),
+            command_log,
+        )
+        self.assertIn("ip -4 route add default via 10.0.1.2 dev tun0", command_log)
 
     def test_server_setup_and_cleanup(self):
         self.run_script("server.sh")

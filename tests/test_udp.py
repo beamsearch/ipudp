@@ -2,6 +2,7 @@ import struct
 import unittest
 from unittest import mock
 
+from crypto import Encrypter, Decrypter
 import udp
 
 
@@ -64,7 +65,6 @@ class RandomStub:
 def make_tunnel(mtu=10, do_random_padding=False):
     tunnel = object.__new__(udp.UDPTun)
     tunnel.remote_addr = ("server", 9000)
-    tunnel.auth_msg = b"auth"
     tunnel.MTU = mtu
     tunnel.do_random_padding = do_random_padding
     tunnel.encrypter = IdentityCipher()
@@ -80,18 +80,14 @@ class UDPTunTests(unittest.TestCase):
         random_source = RandomStub(3)
 
         with mock.patch("udp.PADDING_RANDOM", random_source), \
-                mock.patch("udp.os.urandom", return_value=b"\xaa" * 3) as urandom:
+                mock.patch("udp.os.urandom", side_effect=[b"n" * 8, b"p" * 3]) as urandom:
             tunnel.send(b"data")
 
         wire_data, address = tunnel.socket.sent
         self.assertEqual(address, ("server", 9000))
         self.assertEqual(random_source.calls, [(0, 6)])
-        urandom.assert_called_once_with(3)
-        self.assertEqual(wire_data[:4], b"auth")
-        self.assertEqual(struct.unpack("<H", wire_data[4:6])[0], 4)
-        self.assertEqual(wire_data[6:10], b"data")
-        self.assertEqual(wire_data[10:], b"\xaa" * 3)
-        self.assertLessEqual(len(wire_data) - 6, tunnel.MTU)
+        self.assertEqual(urandom.call_args_list, [mock.call(8), mock.call(3)])
+        self.assertEqual(wire_data, b"n" * 8 + b"data" + b"ppp" + b"data-end")
 
     def test_mtu_sized_packet_is_not_padded(self):
         tunnel = make_tunnel(do_random_padding=True)
@@ -101,7 +97,7 @@ class UDPTunTests(unittest.TestCase):
             tunnel.send(b"x" * tunnel.MTU)
 
         self.assertEqual(random_source.calls, [])
-        self.assertEqual(len(tunnel.socket.sent[0]), 6 + tunnel.MTU)
+        self.assertEqual(len(tunnel.socket.sent[0]), 16 + tunnel.MTU)
 
     def test_oversized_outbound_packet_is_logged_and_dropped(self):
         tunnel = make_tunnel()
@@ -128,41 +124,87 @@ class UDPTunTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unexpected"):
             tunnel.send(b"data")
 
-    def test_receive_reads_and_validates_complete_padded_datagram(self):
-        tunnel = make_tunnel()
-        sender = ("authenticated", 3000)
-        tunnel.remote_addr = ("previous", 2000)
-        tunnel.socket = SocketStub((b"auth\x04\x00dataxyz", sender))
-
-        self.assertEqual(tunnel.recv(), b"data")
-        self.assertEqual(tunnel.socket.recv_size, udp.MAX_UDP_PAYLOAD_SIZE)
-        self.assertEqual(tunnel.remote_addr, sender)
-        self.assertEqual(tunnel.logger.traffic, [("i", 13)])
-
-    def test_oversized_received_packet_does_not_update_remote_address(self):
-        tunnel = make_tunnel()
-        tunnel.remote_addr = ("previous", 2000)
-        message = b"auth" + struct.pack("<H", 11) + b"x" * 11
-        tunnel.socket = SocketStub((message, ("attacker", 3000)))
-
-        self.assertIsNone(tunnel.recv())
-        self.assertEqual(tunnel.remote_addr, ("previous", 2000))
-        self.assertIn("11 padded bytes", tunnel.logger.messages[0])
-
-    def test_padding_larger_than_mtu_is_rejected(self):
-        tunnel = make_tunnel()
-        message = b"auth" + struct.pack("<H", 3) + b"abc" + b"x" * 8
+    def receive(self, message, mtu=100):
+        tunnel = make_tunnel(mtu=mtu)
         tunnel.socket = SocketStub((message, ("sender", 3000)))
+        result = tunnel.recv()
+        if result is None:
+            self.assertEqual(tunnel.remote_addr, ("server", 9000))
+            self.assertEqual(tunnel.logger.traffic, [])
+        return tunnel, result
 
+    def test_receive_ipv4_and_ipv6_with_padding(self):
+        for packet in (ipv4(), ipv4(ihl=6), ipv6(), ipv6(b"")):
+            for padding in (b"", b"random-data-end"):
+                message = frame(packet, padding)
+                tunnel, result = self.receive(message)
+                self.assertEqual(result, packet)
+                self.assertEqual(tunnel.socket.recv_size, udp.MAX_UDP_PAYLOAD_SIZE)
+                self.assertEqual(tunnel.remote_addr, ("sender", 3000))
+                self.assertEqual(tunnel.logger.traffic, [("i", len(message))])
+
+    def test_oversized_packet_and_padding_are_rejected(self):
+        for packet, padding in ((ipv4(b"x" * 81), b""), (ipv4(), b"x" * 80)):
+            tunnel, result = self.receive(frame(packet, padding))
+            self.assertIsNone(result)
+            self.assertIn("padded bytes", tunnel.logger.messages[0])
+
+    def test_invalid_ip_headers_and_lengths_are_rejected(self):
+        bad_ihl = bytearray(ipv4())
+        bad_ihl[0] = 0x44
+        bad_length = bytearray(ipv4(ihl=6))
+        bad_length[2:4] = struct.pack('!H', 20)
+        for packet in (b"", b"x" * 40, ipv4()[:19], ipv6()[:39],
+                       ipv4()[:-1], ipv6()[:-1], bad_ihl, bad_length):
+            tunnel, result = self.receive(frame(packet))
+            self.assertIsNone(result)
+            self.assertTrue(tunnel.logger.messages)
+
+    def test_missing_or_nonfinal_marker_is_decryption_failure(self):
+        for message in (b"", frame(ipv4())[:-1], frame(ipv4()) + b"x",
+                        frame(ipv4())[:-8] + b"bad-mark"):
+            tunnel, result = self.receive(message)
+            self.assertIsNone(result)
+            self.assertIn("could not decrypt", tunnel.logger.messages[0])
+
+    def test_marker_without_nonce_and_ip_is_rejected(self):
+        for message in (b"data-end", b"n" * 8 + b"data-end"):
+            self.assertIsNone(self.receive(message)[1])
+
+    def test_encrypted_round_trips_reset_state_and_randomize_nonce(self):
+        tunnel = make_tunnel(mtu=100, do_random_padding=True)
+        tunnel.encrypter = Encrypter(123)
+        tunnel.decrypter = Decrypter(123)
+        wires = []
+        with mock.patch("udp.PADDING_RANDOM", RandomStub(3)):
+            for packet in (ipv4(), ipv6(), ipv4()):
+                tunnel.send(packet)
+                wire = tunnel.socket.sent[0]
+                wires.append(wire)
+                tunnel.socket.incoming = (wire, ("sender", 3000))
+                self.assertEqual(tunnel.recv(), packet)
+        self.assertNotEqual(wires[0], wires[2])
+        tunnel.decrypter = Decrypter(456)
         self.assertIsNone(tunnel.recv())
-        self.assertIn("11 padded bytes", tunnel.logger.messages[0])
+        self.assertIn("could not decrypt", tunnel.logger.messages[-1])
 
-    def test_declared_length_larger_than_datagram_is_rejected(self):
-        tunnel = make_tunnel()
-        tunnel.socket = SocketStub((b"auth\x05\x00abc", ("sender", 3000)))
 
-        self.assertIsNone(tunnel.recv())
-        self.assertIn("declared 5 bytes but received 3", tunnel.logger.messages[0])
+def ipv4(payload=b"data", ihl=5):
+    header = bytearray(ihl * 4)
+    header[0] = 0x40 | ihl
+    header[2:4] = struct.pack('!H', len(header) + len(payload))
+    return bytes(header) + payload
+
+
+def ipv6(payload=b"data"):
+    header = bytearray(40)
+    header[0] = 0x60
+    header[4:6] = struct.pack('!H', len(payload))
+    return bytes(header) + payload
+
+
+def frame(packet, padding=b""):
+    return b"n" * 8 + packet + padding + b"data-end"
 
 
 if __name__ == "__main__":
